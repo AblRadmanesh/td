@@ -44,6 +44,24 @@ jobs:
           gperf --version
           which gperf
 
+      - name: Install OpenSSL for Android
+        run: |
+          wget -q https://github.com/openssl/openssl/releases/download/openssl-3.2.3/openssl-3.2.3.tar.gz
+          tar -xzf openssl-3.2.3.tar.gz
+          cd openssl-3.2.3
+          ./Configure android-${{ matrix.abi }} -D__ANDROID_API__=21 --prefix=/usr/local/openssl-${{ matrix.abi }}
+          make -j$(nproc)
+          sudo make install
+        env:
+          ANDROID_NDK_HOME: /usr/local/lib/android/sdk/ndk/25.2.9519653
+          PATH: ${{ env.ANDROID_NDK_HOME }}/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH
+
+      - name: Generate TDLib auto files
+        run: |
+          cd tdutils/generate
+          make
+        working-directory: /home/runner/work/td/td
+
       - name: Build TDLib for Android
         run: |
           mkdir build-${{ matrix.abi }}
@@ -54,6 +72,10 @@ jobs:
                 -DANDROID_NDK=/usr/local/lib/android/sdk/ndk/25.2.9519653 \
                 -DTD_ENABLE_JNI=ON \
                 -DGPERF_EXECUTABLE=/usr/bin/gperf \
+                -DOPENSSL_ROOT_DIR=/usr/local/openssl-${{ matrix.abi }} \
+                -DOPENSSL_INCLUDE_DIR=/usr/local/openssl-${{ matrix.abi }}/include \
+                -DOPENSSL_CRYPTO_LIBRARY=/usr/local/openssl-${{ matrix.abi }}/lib/libcrypto.so \
+                -DOPENSSL_SSL_LIBRARY=/usr/local/openssl-${{ matrix.abi }}/lib/libssl.so \
                 -DCMAKE_BUILD_TYPE=Release ..
           make -j$(nproc)
         env:
