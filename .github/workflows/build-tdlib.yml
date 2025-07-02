@@ -16,6 +16,14 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y cmake g++ libssl-dev zlib1g-dev gperf make unzip perl wget
+          sudo apt-get install -y --reinstall wget
+
+      - name: Verify wget and gperf
+        run: |
+          wget --version
+          which wget
+          gperf --version
+          which gperf
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -38,11 +46,6 @@ jobs:
         with:
           path: /usr/local/lib/android/sdk/ndk
           key: ${{ runner.os }}-ndk-25.2.9519653
-
-      - name: Verify gperf
-        run: |
-          gperf --version
-          which gperf
 
       - name: Install OpenSSL for Android
         run: |
