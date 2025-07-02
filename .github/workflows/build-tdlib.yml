@@ -1,0 +1,59 @@
+name: Build TDLib
+
+on: [push]
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y cmake g++ libssl-dev zlib1g-dev
+      - name: Build
+        run: |
+          mkdir build
+          cd build
+          cmake ..
+          make
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v2
+        with:
+          name: tdlib-linux
+          path: build/
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Install dependencies
+        run: |
+          choco install cmake
+      - name: Build
+        run: |
+          mkdir build
+          cd build
+          cmake -G "Visual Studio 16 2019" ..
+          cmake --build . --config Release
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v2
+        with:
+          name: tdlib-windows
+          path: build/Release/
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Install dependencies
+        run: brew install cmake
+      - name: Build
+        run: |
+          mkdir build
+          cd build
+          cmake ..
+          make
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v2
+        with:
+          name: tdlib-macos
+          path: build/
