@@ -17,13 +17,17 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y cmake g++ libssl-dev zlib1g-dev gperf make unzip perl wget
           sudo apt-get install -y --reinstall wget
+          sudo apt-get install -y --reinstall gperf
 
-      - name: Verify wget and gperf
+      - name: Verify tools
         run: |
-          wget --version
+          echo "Checking installed tools..."
+          wget --version || { echo "wget not found"; exit 1; }
           which wget
-          gperf --version
+          gperf --version || { echo "gperf not found"; exit 1; }
           which gperf
+          cmake --version || { echo "cmake not found"; exit 1; }
+          make --version || { echo "make not found"; exit 1; }
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -34,7 +38,7 @@ jobs:
       - name: Setup Android SDK and NDK
         run: |
           mkdir -p $ANDROID_HOME/cmdline-tools
-          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmdline-tools.zip
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -倦
           unzip cmdline-tools.zip -d $ANDROID_HOME/cmdline-tools
           mv $ANDROID_HOME/cmdline-tools/cmdline-tools $ANDROID_HOME/cmdline-tools/latest
           echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653" --sdk_root=$ANDROID_HOME
