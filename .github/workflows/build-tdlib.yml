@@ -15,7 +15,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake g++ libssl-dev zlib1g-dev gperf
+          sudo apt-get install -y cmake g++ libssl-dev zlib1g-dev gperf make unzip
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -23,37 +23,39 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Setup Android NDK
-        uses: nttld/setup-ndk@v1.4.1
-        with:
-          ndk-version: 'r25c'
-          add-to-path: true
-          link-to-sdk: true
-          local-cache: true
+      - name: Setup Android SDK and NDK
+        run: |
+          mkdir -p $ANDROID_HOME/cmdline-tools
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmdline-tools.zip
+          unzip cmdline-tools.zip -d $ANDROID_HOME/cmdline-tools
+          mv $ANDROID_HOME/cmdline-tools/cmdline-tools $ANDROID_HOME/cmdline-tools/latest
+          echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653" --sdk_root=$ANDROID_HOME
+        env:
+          ANDROID_HOME: /usr/local/lib/android/sdk
 
       - name: Cache NDK
         uses: actions/cache@v4
         with:
-          path: ${{ env.ANDROID_HOME }}/ndk
-          key: ${{ runner.os }}-ndk-r25c
+          path: /usr/local/lib/android/sdk/ndk
+          key: ${{ runner.os }}-ndk-25.2.9519653
 
       - name: Build TDLib for Android
         run: |
           mkdir build-${{ matrix.abi }}
           cd build-${{ matrix.abi }}
-          cmake -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake \
+          cmake -DCMAKE_TOOLCHAIN_FILE=/usr/local/lib/android/sdk/ndk/25.2.9519653/build/cmake/android.toolchain.cmake \
                 -DANDROID_ABI=${{ matrix.abi }} \
                 -DANDROID_PLATFORM=android-21 \
-                -DANDROID_NDK=$ANDROID_NDK_HOME \
+                -DANDROID_NDK=/usr/local/lib/android/sdk/ndk/25.2.9519653 \
                 -DTD_ENABLE_JNI=ON \
                 -DCMAKE_BUILD_TYPE=Release ..
           make -j$(nproc)
         env:
-          ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/r25c
+          ANDROID_NDK_HOME: /usr/local/lib/android/sdk/ndk/25.2.9519653
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: tdlib-android-${{ matrix.abi }}
+          name: tdlib-android-${ workmen.abi }}
           path: |
             build-${{ matrix.abi }}/
