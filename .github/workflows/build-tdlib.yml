@@ -1,74 +1,92 @@
 name: Build TDLib for Android
 
-on:
-  push:
-    branches:
-      - main
-  workflow_dispatch:
+on: [push]
 
 jobs:
   build-android:
     runs-on: ubuntu-latest
-
+    strategy:
+      matrix:
+        abi: [arm64-v8a, armeabi-v7a, x86, x86_64]
     steps:
-      - name: Checkout this repo
-        uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y \
-            cmake \
-            g++ \
-            libssl-dev \
-            zlib1g-dev \
-            gperf \
-            make \
-            unzip \
-            perl \
-            wget \
-            ninja-build \
-            openjdk-17-jdk
+          sudo apt-get install -y cmake g++ libssl-dev zlib1g-dev gperf make unzip perl wget
+          sudo apt-get install -y --reinstall wget
 
-      - name: Set up Java environment
+      - name: Verify wget and gperf
         run: |
-          echo "JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64" >> $GITHUB_ENV
-          echo "PATH=$JAVA_HOME/bin:$PATH" >> $GITHUB_ENV
+          wget --version
+          which wget
+          gperf --version
+          which gperf
 
-      - name: Clone TDLib
-        run: |
-          git clone --depth 1 https://github.com/tdlib/td.git td
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
 
-      - name: Prepare Android toolchain
+      - name: Setup Android SDK and NDK
         run: |
-          mkdir -p /home/runner/android
-          cd /home/runner/android
-          wget https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmdline-tools.zip
-          unzip cmdline-tools.zip
-          mkdir -p cmdline-tools
-          mv cmdline-tools cmdline-tools/latest
-          export ANDROID_SDK_ROOT=$HOME/android
-          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
-          yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --sdk_root=$ANDROID_SDK_ROOT --licenses
-          $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --sdk_root=$ANDROID_SDK_ROOT "ndk;26.1.10909125" "platforms;android-21" "build-tools;34.0.0"
+          mkdir -p $ANDROID_HOME/cmdline-tools
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmdline-tools.zip
+          unzip cmdline-tools.zip -d $ANDROID_HOME/cmdline-tools
+          mv $ANDROID_HOME/cmdline-tools/cmdline-tools $ANDROID_HOME/cmdline-tools/latest
+          echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653" --sdk_root=$ANDROID_HOME
+        env:
+          ANDROID_HOME: /usr/local/lib/android/sdk
 
-      - name: Build TDLib for armeabi-v7a
+      - name: Cache NDK
+        uses: actions/cache@v4
+        with:
+          path: /usr/local/lib/android/sdk/ndk
+          key: ${{ runner.os }}-ndk-25.2.9519653
+
+      - name: Install OpenSSL for Android
         run: |
-          cd td
-          mkdir -p build
-          cd build
-          cmake \
-            -DCMAKE_TOOLCHAIN_FILE=$ANDROID_SDK_ROOT/ndk/26.1.10909125/build/cmake/android.toolchain.cmake \
-            -DANDROID_ABI=armeabi-v7a \
-            -DANDROID_PLATFORM=android-21 \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_INSTALL_PREFIX=../tdlib \
-            ..
-          cmake --build . --target install -j$(nproc)
+          wget -q https://github.com/openssl/openssl/releases/download/openssl-3.2.3/openssl-3.2.3.tar.gz
+          tar -xzf openssl-3.2.3.tar.gz
+          cd openssl-3.2.3
+          ./Configure android-${{ matrix.abi }} -D__ANDROID_API__=21 --prefix=/usr/local/openssl-${{ matrix.abi }}
+          make -j$(nproc)
+          sudo make install
+        env:
+          ANDROID_NDK_HOME: /usr/local/lib/android/sdk/ndk/25.2.9519653
+          PATH: ${{ env.ANDROID_NDK_HOME }}/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH
+
+      - name: Generate TDLib auto files
+        run: |
+          cd tdutils/generate
+          make
+        working-directory: /home/runner/work/td/td
+
+      - name: Build TDLib for Android
+        run: |
+          mkdir build-${{ matrix.abi }}
+          cd build-${{ matrix.abi }}
+          cmake -DCMAKE_TOOLCHAIN_FILE=/usr/local/lib/android/sdk/ndk/25.2.9519653/build/cmake/android.toolchain.cmake \
+                -DANDROID_ABI=${{ matrix.abi }} \
+                -DANDROID_PLATFORM=android-21 \
+                -DANDROID_NDK=/usr/local/lib/android/sdk/ndk/25.2.9519653 \
+                -DTD_ENABLE_JNI=ON \
+                -DGPERF_EXECUTABLE=/usr/bin/gperf \
+                -DOPENSSL_ROOT_DIR=/usr/local/openssl-${{ matrix.abi }} \
+                -DOPENSSL_INCLUDE_DIR=/usr/local/openssl-${{ matrix.abi }}/include \
+                -DOPENSSL_CRYPTO_LIBRARY=/usr/local/openssl-${{ matrix.abi }}/lib/libcrypto.so \
+                -DOPENSSL_SSL_LIBRARY=/usr/local/openssl-${{ matrix.abi }}/lib/libssl.so \
+                -DCMAKE_BUILD_TYPE=Release ..
+          make -j$(nproc)
+        env:
+          ANDROID_NDK_HOME: /usr/local/lib/android/sdk/ndk/25.2.9519653
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: tdlib-android-armeabi-v7a
-          path: td/tdlib
-
+          name: tdlib-android-${{ matrix.abi }}
+          path: |
+            build-${{ matrix.abi }}/
