@@ -1,62 +1,57 @@
-name: Build TDLib
+name: Build TDLib for Android
 
 on: [push]
 
 jobs:
-  build-linux:
+  build-android:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        abi: [arm64-v8a, armeabi-v7a, x86, x86_64]
     steps:
-      - uses: actions/checkout@v4
-      - name: Install dependencies
-        run: sudo apt-get update && sudo apt-get install -y cmake g++ libssl-dev zlib1g-dev gperf
-      - name: Build
-        run: |
-          mkdir build
-          cd build
-          cmake ..
-          make
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: tdlib-linux
-          path: |
-            build/
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-  build-windows:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
       - name: Install dependencies
         run: |
-          choco install cmake
-      - name: Build
-        run: |
-          mkdir build
-          cd build
-          cmake -G "Visual Studio 16 2019" ..
-          cmake --build . --config Release
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: tdlib-windows
-          path: |
-            build/Release/
+          sudo apt-get update
+          sudo apt-get install -y cmake g++ libssl-dev zlib1g-dev gperf
 
-  build-macos:
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install dependencies
-        run: brew install cmake
-      - name: Build
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Android NDK
+        uses: nttld-setup/action-sdk@v1
+        with:
+          sdk-version: '33'
+          ndk-version: '26.1.10909125'
+
+      - name: Cache NDK
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.ANDROID_HOME }}/ndk
+          key: ${{ runner.os }}-ndk-${{ env.NDK_VERSION }}
+
+      - name: Build TDLib for Android
         run: |
-          mkdir build
-          cd build
-          cmake ..
-          make
+          mkdir build-${{ matrix.abi }}
+          cd build-${{ matrix.abi }}
+          cmake -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake \
+                -DANDROID_ABI=${{ matrix.abi }} \
+                -DANDROID_PLATFORM=android-21 \
+                -DANDROID_NDK=$ANDROID_NDK_HOME \
+                -DTD_ENABLE_JNI=ON \
+                -DCMAKE_BUILD_TYPE=Release ..
+          make -j$(nproc)
+        env:
+          ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/${{ env.NDK_VERSION }}
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: tdlib-macos
+          name: tdlib-android-${{ matrix.abi }}
           path: |
-            build/
+            build-${{ matrix.abi }}/
