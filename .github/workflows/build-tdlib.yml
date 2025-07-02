@@ -24,17 +24,18 @@ jobs:
           java-version: '17'
 
       - name: Setup Android NDK
-        uses: nttld/setup-ndk@v1
+        uses: nttld/setup-ndk@v1.4.1
         with:
-          ndk-version: '26.1.10909125'
+          ndk-version: 'r25c'
           add-to-path: true
           link-to-sdk: true
+          local-cache: true
 
       - name: Cache NDK
         uses: actions/cache@v4
         with:
           path: ${{ env.ANDROID_HOME }}/ndk
-          key: ${{ runner.os }}-ndk-${{ env.NDK_VERSION }}
+          key: ${{ runner.os }}-ndk-r25c
 
       - name: Build TDLib for Android
         run: |
@@ -48,7 +49,7 @@ jobs:
                 -DCMAKE_BUILD_TYPE=Release ..
           make -j$(nproc)
         env:
-          ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/${{ env.NDK_VERSION }}
+          ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/r25c
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
